@@ -1,0 +1,564 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 使用者模型
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  username    String   @unique
+  password    String
+  name        String
+  role        Role     @default(STAFF)
+  department  String?
+  phone       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 關聯
+  createdProjects    Project[] @relation("CreatedBy")
+  managedProjects    Project[] @relation("Manager")
+  approvedBudgets    Budget[]  @relation("ApprovedBy")
+  createdInquiries   Inquiry[] @relation("CreatedBy")
+  createdPurchases   PurchaseOrder[] @relation("CreatedBy")
+  approvedPurchases  PurchaseOrder[] @relation("ApprovedBy")
+
+  @@map("users")
+}
+
+// 權限角色
+enum Role {
+  ADMIN       // 系統管理員
+  MANAGER     // 專案經理
+  SUPERVISOR  // 主管
+  STAFF       // 一般員工
+  ACCOUNTANT  // 會計
+}
+
+// 專案模型
+model Project {
+  id              String        @id @default(cuid())
+  name            String
+  code            String        @unique
+  description     String?
+  location        String?
+  startDate       DateTime?
+  endDate         DateTime?
+  estimatedCost   Decimal       @default(0)
+  actualCost      Decimal       @default(0)
+  status          ProjectStatus @default(PLANNING)
+  contractNumber  String?       @unique
+  clientName      String?
+  clientContact   String?
+  folderPath      String?       // 自動建立的專案資料夾路徑
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  // 關聯
+  createdById     String
+  createdBy       User          @relation("CreatedBy", fields: [createdById], references: [id])
+  managerId       String?
+  manager         User?         @relation("Manager", fields: [managerId], references: [id])
+  
+  // 子項目
+  budgets         Budget[]
+  inquiries       Inquiry[]
+  purchaseOrders  PurchaseOrder[]
+  progressReports ProgressReport[]
+  materials       ProjectMaterial[]
+  contracts       Contract[]
+
+  @@map("projects")
+}
+
+enum ProjectStatus {
+  PLANNING      // 規劃中
+  BUDGETING     // 預算編製中
+  APPROVED      // 已核准
+  IN_PROGRESS   // 進行中
+  ON_HOLD       // 暫停
+  COMPLETED     // 已完成
+  CANCELLED     // 已取消
+}
+
+// 預算表模型
+model Budget {
+  id            String        @id @default(cuid())
+  projectId     String
+  version       Int           @default(1)
+  totalAmount   Decimal
+  usedAmount    Decimal       @default(0)
+  remainingAmount Decimal     @default(0)
+  status        BudgetStatus  @default(DRAFT)
+  submittedAt   DateTime?
+  approvedAt    DateTime?
+  lockedAt      DateTime?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // 關聯
+  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  approvedById  String?
+  approvedBy    User?         @relation("ApprovedBy", fields: [approvedById], references: [id])
+  items         BudgetItem[]
+
+  @@unique([projectId, version])
+  @@map("budgets")
+}
+
+enum BudgetStatus {
+  DRAFT       // 草稿
+  SUBMITTED   // 已提交
+  APPROVED    // 已核准
+  REJECTED    // 已拒絕
+  LOCKED      // 已鎖定
+}
+
+// 預算項目
+model BudgetItem {
+  id          String   @id @default(cuid())
+  budgetId    String
+  category    String   // 工程類別
+  item        String   // 項目名稱
+  unit        String   // 單位
+  quantity    Decimal  // 數量
+  unitPrice   Decimal  // 單價
+  totalPrice  Decimal  // 總價
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 關聯
+  budget      Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  @@map("budget_items")
+}
+
+// 廠商模型
+model Supplier {
+  id            String   @id @default(cuid())
+  name          String
+  code          String   @unique
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?
+  taxNumber     String?  // 統一編號
+  bankAccount   String?
+  paymentTerms  String?  // 付款條件
+  rating        Int?     @default(0) // 評分 0-5
+  isActive      Boolean  @default(true)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // 關聯
+  inquiryItems  InquiryItem[]
+  quotes        Quote[]
+  purchaseOrders PurchaseOrder[]
+
+  @@map("suppliers")
+}
+
+// 材料主檔
+model Material {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  category    String
+  unit        String   // 單位
+  specification String? // 規格
+  brand       String?  // 品牌
+  model       String?  // 型號
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 關聯
+  inquiryItems    InquiryItem[]
+  quoteItems      QuoteItem[]
+  purchaseItems   PurchaseItem[]
+  projectMaterials ProjectMaterial[]
+
+  @@map("materials")
+}
+
+// 專案材料關聯
+model ProjectMaterial {
+  id              String   @id @default(cuid())
+  projectId       String
+  materialId      String
+  estimatedQty    Decimal  // 預估數量
+  actualQty       Decimal  @default(0) // 實際數量
+  estimatedPrice  Decimal  // 預估單價
+  actualPrice     Decimal  @default(0) // 實際單價
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // 關聯
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  material  Material @relation(fields: [materialId], references: [id])
+
+  @@unique([projectId, materialId])
+  @@map("project_materials")
+}
+
+// 詢價單模型
+model Inquiry {
+  id            String        @id @default(cuid())
+  projectId     String
+  inquiryNumber String        @unique
+  title         String
+  description   String?
+  dueDate       DateTime      // 回覆截止日期
+  status        InquiryStatus @default(SENT)
+  sentAt        DateTime      @default(now())
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // 關聯
+  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdById   String
+  createdBy     User          @relation("CreatedBy", fields: [createdById], references: [id])
+  items         InquiryItem[]
+  quotes        Quote[]
+
+  @@map("inquiries")
+}
+
+enum InquiryStatus {
+  DRAFT     // 草稿
+  SENT      // 已送出
+  RECEIVED  // 已收到回覆
+  CLOSED    // 已結案
+}
+
+// 詢價項目
+model InquiryItem {
+  id          String   @id @default(cuid())
+  inquiryId   String
+  materialId  String
+  supplierId  String
+  quantity    Decimal
+  unit        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 關聯
+  inquiry   Inquiry  @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  material  Material @relation(fields: [materialId], references: [id])
+  supplier  Supplier @relation(fields: [supplierId], references: [id])
+
+  @@map("inquiry_items")
+}
+
+// 報價單模型
+model Quote {
+  id            String      @id @default(cuid())
+  inquiryId     String
+  supplierId    String
+  quoteNumber   String      @unique
+  validUntil    DateTime    // 報價有效期限
+  totalAmount   Decimal     @default(0)
+  notes         String?
+  status        QuoteStatus @default(PENDING)
+  submittedAt   DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  // 關聯
+  inquiry   Inquiry     @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  supplier  Supplier    @relation(fields: [supplierId], references: [id])
+  items     QuoteItem[]
+
+  @@unique([inquiryId, supplierId])
+  @@map("quotes")
+}
+
+enum QuoteStatus {
+  PENDING   // 待報價
+  SUBMITTED // 已提交
+  SELECTED  // 已選中
+  REJECTED  // 已拒絕
+}
+
+// 報價項目
+model QuoteItem {
+  id          String   @id @default(cuid())
+  quoteId     String
+  materialId  String
+  quantity    Decimal
+  unitPrice   Decimal
+  totalPrice  Decimal
+  deliveryDays Int?    // 交貨天數
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 關聯
+  quote     Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  material  Material @relation(fields: [materialId], references: [id])
+
+  @@map("quote_items")
+}
+
+// 採購單模型
+model PurchaseOrder {
+  id              String             @id @default(cuid())
+  projectId       String
+  supplierId      String
+  orderNumber     String             @unique
+  orderDate       DateTime           @default(now())
+  expectedDelivery DateTime?         // 預計交貨日期
+  actualDelivery  DateTime?          // 實際交貨日期
+  totalAmount     Decimal            @default(0)
+  paymentTerms    String?            // 付款條件
+  status          PurchaseOrderStatus @default(DRAFT)
+  notes           String?
+  contractPath    String?            // 合約檔案路徑
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  // 關聯
+  project       Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  supplier      Supplier          @relation(fields: [supplierId], references: [id])
+  createdById   String
+  createdBy     User              @relation("CreatedBy", fields: [createdById], references: [id])
+  approvedById  String?
+  approvedBy    User?             @relation("ApprovedBy", fields: [approvedById], references: [id])
+  items         PurchaseItem[]
+  deliveries    DeliverySchedule[]
+  payments      Payment[]
+  vouchers      Voucher[]
+  progressEntries ProgressEntry[]
+
+  @@map("purchase_orders")
+}
+
+enum PurchaseOrderStatus {
+  DRAFT       // 草稿
+  SUBMITTED   // 已提交
+  APPROVED    // 已核准
+  SENT        // 已送出
+  CONFIRMED   // 已確認
+  DELIVERED   // 已交貨
+  COMPLETED   // 已完成
+  CANCELLED   // 已取消
+}
+
+// 採購項目
+model PurchaseItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  materialId      String
+  quantity        Decimal
+  unitPrice       Decimal
+  totalPrice      Decimal
+  receivedQty     Decimal       @default(0) // 已收貨數量
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // 關聯
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  material      Material      @relation(fields: [materialId], references: [id])
+
+  @@map("purchase_items")
+}
+
+// 交貨排程
+model DeliverySchedule {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  scheduledDate   DateTime      // 預定交貨日期
+  actualDate      DateTime?     // 實際交貨日期
+  quantity        Decimal
+  description     String?
+  status          DeliveryStatus @default(SCHEDULED)
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // 關聯
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@map("delivery_schedules")
+}
+
+enum DeliveryStatus {
+  SCHEDULED // 已排程
+  DELAYED   // 已延遲
+  DELIVERED // 已交貨
+  CANCELLED // 已取消
+}
+
+// 付款記錄
+model Payment {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  amount          Decimal
+  paymentDate     DateTime      @default(now())
+  dueDate         DateTime?
+  method          String?       // 付款方式
+  reference       String?       // 付款參考號
+  status          PaymentStatus @default(PENDING)
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // 關聯
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+enum PaymentStatus {
+  PENDING   // 待付款
+  PAID      // 已付款
+  OVERDUE   // 逾期
+  CANCELLED // 已取消
+}
+
+// 傳票
+model Voucher {
+  id              String      @id @default(cuid())
+  purchaseOrderId String?
+  projectId       String?
+  voucherNumber   String      @unique
+  date            DateTime    @default(now())
+  amount          Decimal
+  type            VoucherType
+  description     String
+  accountCode     String?     // 科目代碼
+  isPosted        Boolean     @default(false) // 是否已過帳
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // 關聯
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+
+  @@map("vouchers")
+}
+
+enum VoucherType {
+  EXPENSE   // 支出
+  INCOME    // 收入
+  TRANSFER  // 轉帳
+}
+
+// 合約
+model Contract {
+  id              String        @id @default(cuid())
+  projectId       String
+  contractNumber  String        @unique
+  title           String
+  signingDate     DateTime      @default(now())
+  startDate       DateTime?
+  endDate         DateTime?
+  amount          Decimal
+  status          ContractStatus @default(DRAFT)
+  filePath        String?       // 合約檔案路徑
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // 關聯
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("contracts")
+}
+
+enum ContractStatus {
+  DRAFT     // 草稿
+  SENT      // 已送出
+  SIGNED    // 已簽署
+  ACTIVE    // 生效中
+  COMPLETED // 已完成
+  CANCELLED // 已取消
+}
+
+// 進度報告
+model ProgressReport {
+  id          String   @id @default(cuid())
+  projectId   String
+  reportDate  DateTime @default(now())
+  period      String   // 報告期間
+  overview    String   // 進度概況
+  achievements String? // 本期達成事項
+  issues      String?  // 問題與風險
+  nextPlan    String?  // 下期計劃
+  progressRate Decimal // 進度百分比
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 關聯
+  project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  entries ProgressEntry[]
+
+  @@map("progress_reports")
+}
+
+// 進度項目
+model ProgressEntry {
+  id                String        @id @default(cuid())
+  progressReportId  String
+  purchaseOrderId   String?
+  activity          String        // 活動描述
+  plannedStartDate  DateTime?     // 計劃開始日期
+  plannedEndDate    DateTime?     // 計劃結束日期
+  actualStartDate   DateTime?     // 實際開始日期
+  actualEndDate     DateTime?     // 實際結束日期
+  progressRate      Decimal       @default(0) // 進度百分比
+  status            ProgressStatus @default(NOT_STARTED)
+  notes             String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  // 關聯
+  progressReport  ProgressReport @relation(fields: [progressReportId], references: [id], onDelete: Cascade)
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+
+  @@map("progress_entries")
+}
+
+enum ProgressStatus {
+  NOT_STARTED // 未開始
+  IN_PROGRESS // 進行中
+  COMPLETED   // 已完成
+  DELAYED     // 延遲
+  ON_HOLD     // 暫停
+}
+
+// 系統通知
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String?          // 如果為空，則為全體通知
+  title     String
+  message   String
+  type      NotificationType @default(INFO)
+  isRead    Boolean          @default(false)
+  data      Json?            // 額外數據 (JSON)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@map("notifications")
+}
+
+enum NotificationType {
+  INFO     // 資訊
+  WARNING  // 警告
+  ERROR    // 錯誤
+  SUCCESS  // 成功
+  URGENT   // 緊急
+}

@@ -1,0 +1,16 @@
+{
+  "name": "construction-management",
+  "services": [
+    {
+      "name": "construction-app",
+      "buildCommand": "npm run build && cd client && npm run build",
+      "startCommand": "npm start",
+      "environment": {
+        "NODE_ENV": "production"
+      },
+      "rootDirectory": ".",
+      "buildContext": ".",
+      "dockerfile": "Dockerfile"
+    }
+  ]
+}

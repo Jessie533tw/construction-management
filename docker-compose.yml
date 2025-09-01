@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 資料庫
+  postgres:
+    image: postgres:15-alpine
+    container_name: construction_db
+    environment:
+      POSTGRES_DB: construction_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 應用程式
+  app:
+    build: .
+    container_name: construction_app
+    environment:
+      DATABASE_URL: "postgresql://postgres:password@postgres:5432/construction_db?schema=public"
+      JWT_SECRET: "development-jwt-secret-key"
+      JWT_EXPIRES_IN: "7d"
+      NODE_ENV: "production"
+      PORT: "3001"
+      FRONTEND_URL: "http://localhost:3001"
+      # 郵件設定（可選）
+      SMTP_HOST: ""
+      SMTP_PORT: "587"
+      SMTP_USER: ""
+      SMTP_PASS: ""
+      FROM_EMAIL: "noreply@construction.local"
+      FROM_NAME: "建設管理系統"
+      # 檔案上傳
+      MAX_FILE_SIZE: "10485760"
+      UPLOAD_PATH: "./uploads"
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http = require('http'); http.get('http://localhost:3001/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
+    driver: local
+  uploads:
+    driver: local
