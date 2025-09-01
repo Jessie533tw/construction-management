@@ -1,16 +1,13 @@
 {
-  "name": "construction-management",
-  "services": [
+  "builds": [
     {
-      "name": "construction-app",
-      "buildCommand": "npm run build && cd client && npm run build",
-      "startCommand": "npm start",
-      "environment": {
-        "NODE_ENV": "production"
-      },
-      "rootDirectory": ".",
-      "buildContext": ".",
-      "dockerfile": "Dockerfile"
+      "src": "package.json",
+      "use": "@zeabur/node",
+      "config": {
+        "buildCommand": "npm install && npx prisma generate && npm run build && cd client && npm install && npm run build",
+        "startCommand": "npm start",
+        "nodeVersion": "18"
+      }
     }
   ]
 }

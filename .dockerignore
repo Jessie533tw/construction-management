@@ -1,14 +1,10 @@
 node_modules
+client/node_modules
 npm-debug.log
-.env
-.env.local
 .git
 .gitignore
-README.md
+.env
 dist
 uploads
-.nyc_output
-coverage
-.coverage
 .cache
 *.log
