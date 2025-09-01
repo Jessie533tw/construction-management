@@ -1,45 +1,25 @@
-# Multi-stage build for Node.js backend and React frontend
-FROM node:18-alpine AS backend-builder
+# Simple single-stage build
+FROM node:18-alpine
 
 WORKDIR /app
 
-# Install dependencies
-COPY package*.json ./
-RUN npm install --only=production
-
-# Copy backend source
-COPY . .
-RUN npm run build
-
-# Frontend builder stage
-FROM node:18-alpine AS frontend-builder
-
-WORKDIR /app/client
-
-# Copy client package files
-COPY client/package*.json ./
-RUN npm install
-
-# Copy client source and build
-COPY client/ ./
-RUN npm run build
-
-# Production stage
-FROM node:18-alpine AS production
-
-WORKDIR /app
-
-# Install PostgreSQL client (for potential database operations)
+# Install PostgreSQL client
 RUN apk add --no-cache postgresql-client
 
-# Copy backend build and dependencies
-COPY --from=backend-builder /app/dist ./dist
-COPY --from=backend-builder /app/node_modules ./node_modules
-COPY --from=backend-builder /app/prisma ./prisma
-COPY --from=backend-builder /app/package*.json ./
+# Copy package files
+COPY package*.json ./
+COPY client/package*.json ./client/
 
-# Copy frontend build
-COPY --from=frontend-builder /app/client/dist ./client/dist
+# Install all dependencies
+RUN npm install
+RUN cd client && npm install
+
+# Copy source code
+COPY . .
+
+# Build backend and frontend
+RUN npx tsc
+RUN cd client && npm run build
 
 # Create uploads directory
 RUN mkdir -p uploads
@@ -47,8 +27,6 @@ RUN mkdir -p uploads
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nodejs -u 1001
-
-# Change ownership of the app directory
 RUN chown -R nodejs:nodejs /app
 USER nodejs
 
